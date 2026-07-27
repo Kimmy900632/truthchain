@@ -4,7 +4,6 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>TruthChain — On-Chain Fake News Detector</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -22,8 +21,6 @@
   .subtitle { color: var(--muted); font-size: 15px; max-width: 420px; line-height: 1.6; margin: 0 auto; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px 32px; width: 100%; max-width: 620px; margin-bottom: 20px; }
   .wallet-section { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .wallet-btn { background: var(--accent); border: none; border-radius: 10px; color: #fff; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600; padding: 10px 20px; cursor: pointer; transition: opacity 0.2s; }
-  .wallet-btn:hover { opacity: 0.85; }
   .wallet-address { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--true); display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -51,7 +48,7 @@
   .claim-text strong { color: var(--text); }
   .reasoning-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
   .reasoning-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-size: 14px; color: var(--text); line-height: 1.6; }
-  .tx-info { margin-top: 14px; font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); }
+  .tx-info { margin-top: 14px; font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); word-break: break-all; }
   .error-msg { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 10px; color: var(--false); font-size: 13px; padding: 12px 16px; margin-top: 12px; display: none; }
   .error-msg.visible { display: block; }
   footer { margin-top: 40px; text-align: center; font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); }
@@ -65,20 +62,14 @@
   <p class="subtitle">Submit any news claim. GenLayer's Intelligent Contract verifies it using AI consensus — verdict recorded permanently on-chain.</p>
 </header>
 
-<!-- WALLET CONNECTION -->
 <div class="card">
-  <div class="wallet-section" id="wallet-section">
-    <button class="wallet-btn" onclick="connectWallet()">🦊 Connect MetaMask</button>
-    <span style="font-size:13px;color:var(--muted)">Wallet required to sign transactions</span>
-  </div>
-  <div id="wallet-info" style="display:none">
+  <div class="wallet-section">
     <span class="dot"></span>
-    <span class="wallet-address" id="wallet-address">0x...</span>
-    <span style="font-size:12px;color:var(--muted);margin-left:8px">Connected to GenLayer Testnet</span>
+    <span class="wallet-address" id="wallet-address">connecting…</span>
+    <span style="font-size:12px;color:var(--muted);margin-left:8px" id="net-label">GenLayer</span>
   </div>
 </div>
 
-<!-- CLAIM INPUT -->
 <div class="card">
   <label for="claim-input">Enter a news claim to verify</label>
   <textarea id="claim-input" placeholder="e.g. Elon Musk owns Twitter"></textarea>
@@ -89,10 +80,9 @@
   </div>
   <div class="error-msg" id="error-msg"></div>
   <div class="status-box" id="status-box"></div>
-  <button class="verify-btn" onclick="verifyClaim()">Verify this claim →</button>
+  <button class="verify-btn" id="verify-btn" onclick="verifyClaim()">Verify this claim →</button>
 </div>
 
-<!-- RESULT -->
 <div class="result-card" id="result-card">
   <div class="verdict-row">
     <div class="verdict-icon" id="verdict-icon"></div>
@@ -104,178 +94,139 @@
   <div class="tx-info" id="tx-info"></div>
 </div>
 
-<footer>Built on GenLayer · Intelligent Contracts · AI Consensus · Contract: 0xB4BffeF577e289E8AD2bABC59cFDB153E2B715EA</footer>
+<footer>Built on GenLayer · Intelligent Contracts · AI Consensus</footer>
 
-<script>
-const CONTRACT_ADDRESS = "0xB4BffeF577e289E8AD2bABC59cFDB153E2B715EA";
+<script type="module">
+import { createClient, createAccount } from "https://esm.sh/genlayer-js@1.1.8";
+import { studionet } from "https://esm.sh/genlayer-js@1.1.8/chains";
+import { TransactionStatus } from "https://esm.sh/genlayer-js@1.1.8/types";
 
-// GenLayer Testnet config
-const GENLAYER_CHAIN = {
-  chainId: "0x" + (14532).toString(16),
-  chainName: "GenLayer Testnet",
-  nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
-  rpcUrls: ["https://studio.genlayer.com/api"],
-  blockExplorerUrls: ["https://studio.genlayer.com"]
-};
+/* ============================================================
+   ONE THING TO FILL IN:  CONTRACT_ADDRESS
+   In GenLayer Studio, the deployed instance address is shown at
+   the top of the left panel ("Deployed at 0x…"). Copy the address
+   for your v0.3.0 deploy and paste it below.
+   ============================================================ */
+const CONTRACT_ADDRESS = "0x2585AEadC307620DE22Ee7576e0018511D9b2Ceb";
 
-let provider = null;
-let signer = null;
-let walletAddress = null;
+const CHAIN = studionet;                 // https://studio.genlayer.com/api
+const WRITE_METHOD = "verify_claim";
+const READ_METHOD  = "get_status";
 
-function setExample(btn) {
-  document.getElementById('claim-input').value = btn.textContent.trim();
-}
+/* Burner account signs the write. Fund this address with GEN from
+   the Studio faucet. Leave null to auto-generate (then fund the
+   address the page prints). THROWAWAY testnet key only — this file
+   is public on GitHub Pages. */
+const BURNER_PRIVATE_KEY = "0x2540259c929a0ce550345f0f39469157e42dcb01c3ea87f13018a2270372533e";
 
-function showError(msg) {
-  const el = document.getElementById('error-msg');
-  el.textContent = msg;
-  el.classList.add('visible');
-}
+let client = null;
+let account = null;
 
-function hideError() {
-  document.getElementById('error-msg').classList.remove('visible');
-}
+function $(id){ return document.getElementById(id); }
+window.setExample = (btn) => { $('claim-input').value = btn.textContent.trim(); };
+function showError(msg){ const el=$('error-msg'); el.textContent=msg; el.classList.add('visible'); }
+function hideError(){ $('error-msg').classList.remove('visible'); }
+function setStatus(msg){ const el=$('status-box'); el.textContent=msg; el.classList.add('visible'); }
+function hideStatus(){ $('status-box').classList.remove('visible'); }
 
-function setStatus(msg) {
-  const el = document.getElementById('status-box');
-  el.textContent = msg;
-  el.classList.add('visible');
-}
-
-function hideStatus() {
-  document.getElementById('status-box').classList.remove('visible');
-}
-
-async function connectWallet() {
-  if (!window.ethereum) {
-    showError("MetaMask not found. Please install MetaMask extension.");
-    return;
-  }
+async function init(){
   try {
-    // Request accounts
-    await window.ethereum.request({ method: 'eth_requestAccounts' });
-
-    // Switch to GenLayer Testnet
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: GENLAYER_CHAIN.chainId }]
-      });
-    } catch (switchError) {
-      if (switchError.code === 4902) {
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [GENLAYER_CHAIN]
-        });
-      }
-    }
-
-    provider = new ethers.BrowserProvider(window.ethereum);
-    signer = await provider.getSigner();
-    walletAddress = await signer.getAddress();
-
-    document.getElementById('wallet-section').style.display = 'none';
-    document.getElementById('wallet-info').style.display = 'flex';
-    document.getElementById('wallet-info').style.alignItems = 'center';
-    document.getElementById('wallet-info').style.gap = '8px';
-    document.getElementById('wallet-address').textContent =
-      walletAddress.slice(0,6) + '...' + walletAddress.slice(-4);
-
+    account = createAccount(BURNER_PRIVATE_KEY || undefined);
+    client = createClient({ chain: CHAIN, account });
+    $('wallet-address').textContent = account.address.slice(0,6) + '…' + account.address.slice(-4);
+    $('net-label').textContent = "Connected to " + CHAIN.name;
   } catch (err) {
-    showError("Wallet connection failed: " + err.message);
+    showError("Could not initialise GenLayer client: " + err.message);
   }
 }
 
-// Encode function call for GenLayer
-function encodeCall(method, args) {
-  return JSON.stringify({ method, args });
-}
-
-async function verifyClaim() {
-  const claim = document.getElementById('claim-input').value.trim();
+window.verifyClaim = async () => {
+  const claim = $('claim-input').value.trim();
   if (!claim) { showError("Please enter a claim."); return; }
-  if (!signer) { showError("Please connect your wallet first."); return; }
+  if (!client) { showError("Client not ready — check the console."); return; }
+  if (CONTRACT_ADDRESS.startsWith("PASTE_")) { showError("Set CONTRACT_ADDRESS in the code first."); return; }
 
   hideError();
-  hideStatus();
-  document.getElementById('result-card').classList.remove('visible');
-
-  const btn = document.querySelector('.verify-btn');
+  $('result-card').classList.remove('visible');
+  const btn = $('verify-btn');
   btn.disabled = true;
-  btn.textContent = "Sending transaction…";
+  btn.textContent = "Verifying on-chain…";
 
   try {
-    // Step 1: Send verify_claim transaction
-    setStatus("⏳ Step 1/3 — Sending verify_claim transaction to GenLayer...");
-
-    const txData = ethers.toUtf8Bytes(JSON.stringify({
-      method: "verify_claim",
-      args: [claim]
-    }));
-
-    const tx = await signer.sendTransaction({
-      to: CONTRACT_ADDRESS,
-      data: ethers.hexlify(txData),
-      gasLimit: 500000n
+    setStatus("Step 1/3 — Submitting claim to the Intelligent Contract…");
+    const txHash = await client.writeContract({
+      address: CONTRACT_ADDRESS,
+      functionName: WRITE_METHOD,
+      args: [claim],
+      value: 0n
     });
 
-    setStatus("⏳ Step 2/3 — Transaction sent! Hash: " + tx.hash.slice(0,20) + "... Waiting for finalization...");
-
-    // Step 2: Wait for receipt
-    const receipt = await tx.wait();
-    setStatus("✅ Step 3/3 — Transaction finalized! Fetching verdict...");
-
-    // Step 3: Read get_status
-    await new Promise(r => setTimeout(r, 3000));
-
-    const statusData = ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify({
-      method: "get_status",
-      args: []
-    })));
-
-    const result = await provider.call({
-      to: CONTRACT_ADDRESS,
-      data: statusData
+    setStatus("Step 2/3 — Waiting for validator consensus to finalise…");
+    await client.waitForTransactionReceipt({
+      hash: txHash,
+      status: TransactionStatus.FINALIZED,
+      retries: 60,
+      interval: 5000
     });
 
-    const decoded = ethers.toUtf8String(result);
-    let status;
-    try {
-      status = JSON.parse(decoded);
-    } catch(e) {
-      status = { verdict: "UNVERIFIABLE", reasoning: decoded || "Verdict recorded on-chain." };
+    // Poll get_status until is_verified flips true — avoids reading PENDING.
+    setStatus("Step 3/3 — Reading the verdict from the contract…");
+    let status = null;
+    for (let i = 0; i < 12; i++) {
+      const result = await client.readContract({
+        address: CONTRACT_ADDRESS,
+        functionName: READ_METHOD,
+        args: []
+      });
+      if (result && result.is_verified) { status = result; break; }
+      await new Promise(r => setTimeout(r, 2500));
     }
+    if (!status) throw new Error("Verdict not ready yet — give it a few seconds and try again.");
 
     hideStatus();
-    showResult(claim, status, tx.hash);
+    showResult(claim, normaliseResult(status), txHash);
 
   } catch (err) {
     hideStatus();
-    showError("Transaction failed: " + err.message);
+    console.error(err);
+    showError("Verification failed: " + (err.message || String(err)));
   }
 
   btn.disabled = false;
   btn.textContent = "Verify this claim →";
+};
+
+function normaliseResult(result){
+  if (result && typeof result === 'object') {
+    return {
+      verdict: (result.verdict || result.status || "UNVERIFIABLE"),
+      reasoning: (result.reasoning || result.explanation || "Verified on-chain by AI consensus.")
+    };
+  }
+  const text = String(result ?? "");
+  const upper = text.toUpperCase();
+  const verdict = ["TRUE","FALSE","UNVERIFIABLE"].find(v => upper.includes(v)) || "UNVERIFIABLE";
+  return { verdict, reasoning: text || "Verdict recorded on-chain." };
 }
 
-function showResult(claim, status, txHash) {
-  const icons = { TRUE: "✅", FALSE: "❌", UNVERIFIABLE: "⚠️" };
+function showResult(claim, status, txHash){
+  const icons = { TRUE:"\u2705", FALSE:"\u274C", UNVERIFIABLE:"\u26A0\uFE0F" };
   const verdict = (status.verdict || "UNVERIFIABLE").toUpperCase();
-
-  document.getElementById('verdict-icon').textContent = icons[verdict] || "❓";
-  const badge = document.getElementById('verdict-badge');
+  $('verdict-icon').textContent = icons[verdict] || "\u2753";
+  const badge = $('verdict-badge');
   badge.textContent = verdict;
   badge.className = "verdict-badge " + verdict;
-  document.getElementById('result-claim').textContent = claim;
-  document.getElementById('reasoning-box').textContent = status.reasoning || "Verified on-chain by AI consensus.";
-  document.getElementById('tx-info').textContent = "Tx: " + (txHash || "recorded") + " · Contract: " + CONTRACT_ADDRESS.slice(0,10) + "...";
-  document.getElementById('result-card').classList.add('visible');
+  $('result-claim').textContent = claim;
+  $('reasoning-box').textContent = status.reasoning || "Verified on-chain by AI consensus.";
+  $('tx-info').textContent = "Tx: " + (txHash || "recorded");
+  $('result-card').classList.add('visible');
 }
 
-document.getElementById('claim-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.ctrlKey) verifyClaim();
+$('claim-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) window.verifyClaim();
 });
+
+init();
 </script>
 </body>
 </html>
-
