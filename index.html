@@ -18,7 +18,7 @@
   .logo { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; margin-bottom: 16px; }
   h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 12px; }
   h1 span { background: linear-gradient(135deg, #7c5cfc, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-  .subtitle { color: var(--muted); font-size: 15px; max-width: 420px; line-height: 1.6; margin: 0 auto; }
+  .subtitle { color: var(--muted); font-size: 15px; max-width: 460px; line-height: 1.6; margin: 0 auto; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px 32px; width: 100%; max-width: 620px; margin-bottom: 20px; }
   .wallet-section { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .wallet-address { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
@@ -48,7 +48,10 @@
   .claim-text strong { color: var(--text); }
   .reasoning-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
   .reasoning-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-size: 14px; color: var(--text); line-height: 1.6; }
-  .tx-info { margin-top: 14px; font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); word-break: break-all; }
+  .source-row { margin-top: 14px; font-size: 12px; color: var(--muted); word-break: break-all; }
+  .source-row a { color: var(--accent); text-decoration: none; }
+  .source-row a:hover { text-decoration: underline; }
+  .tx-info { margin-top: 10px; font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); word-break: break-all; }
   .error-msg { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 10px; color: var(--false); font-size: 13px; padding: 12px 16px; margin-top: 12px; display: none; }
   .error-msg.visible { display: block; }
   footer { margin-top: 40px; text-align: center; font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); }
@@ -59,7 +62,7 @@
 <header>
   <div class="logo">⬡ TruthChain</div>
   <h1>Facts verified<br><span>on-chain by AI</span></h1>
-  <p class="subtitle">Submit any news claim. GenLayer's Intelligent Contract verifies it using AI consensus — verdict recorded permanently on-chain.</p>
+  <p class="subtitle">Submit any news claim. A GenLayer Intelligent Contract retrieves a real source, rules on the claim using that evidence, and records the verdict on-chain.</p>
 </header>
 
 <div class="card">
@@ -76,7 +79,7 @@
   <div class="examples">
     <button class="example-pill" onclick="setExample(this)">Elon Musk owns Twitter</button>
     <button class="example-pill" onclick="setExample(this)">Bitcoin was created in 2009</button>
-    <button class="example-pill" onclick="setExample(this)">The FIFA World Cup 2022 was held in Qatar</button>
+    <button class="example-pill" onclick="setExample(this)">The Moon is made of cheese</button>
   </div>
   <div class="error-msg" id="error-msg"></div>
   <div class="status-box" id="status-box"></div>
@@ -91,10 +94,11 @@
   <div class="claim-text">Claim: <strong id="result-claim"></strong></div>
   <div class="reasoning-label">AI Reasoning</div>
   <div class="reasoning-box" id="reasoning-box">—</div>
+  <div class="source-row" id="source-row"></div>
   <div class="tx-info" id="tx-info"></div>
 </div>
 
-<footer>Built on GenLayer · Intelligent Contracts · AI Consensus</footer>
+<footer>Built on GenLayer · Attributable Evidence · Validator Consensus</footer>
 
 <script type="module">
 import { createClient, createAccount } from "https://esm.sh/genlayer-js@1.1.8";
@@ -102,21 +106,16 @@ import { studionet } from "https://esm.sh/genlayer-js@1.1.8/chains";
 import { TransactionStatus } from "https://esm.sh/genlayer-js@1.1.8/types";
 
 /* ============================================================
-   ONE THING TO FILL IN:  CONTRACT_ADDRESS
-   In GenLayer Studio, the deployed instance address is shown at
-   the top of the left panel ("Deployed at 0x…"). Copy the address
-   for your v0.3.0 deploy and paste it below.
+   FILL IN: your latest v0.4.1 deployed contract address from Studio
+   (top of the left panel: "Deployed at 0x…").
    ============================================================ */
-const CONTRACT_ADDRESS = "0x2585AEadC307620DE22Ee7576e0018511D9b2Ceb";
+const CONTRACT_ADDRESS = "0xF863900BD1Bf1926FB6991Db34Fc2dcf8cABbF4b";
 
-const CHAIN = studionet;                 // https://studio.genlayer.com/api
+const CHAIN = studionet;
 const WRITE_METHOD = "verify_claim";
 const READ_METHOD  = "get_status";
 
-/* Burner account signs the write. Fund this address with GEN from
-   the Studio faucet. Leave null to auto-generate (then fund the
-   address the page prints). THROWAWAY testnet key only — this file
-   is public on GitHub Pages. */
+// Throwaway testnet-only key. Public by design — never reuse anywhere real.
 const BURNER_PRIVATE_KEY = "0x2540259c929a0ce550345f0f39469157e42dcb01c3ea87f13018a2270372533e";
 
 let client = null;
@@ -161,22 +160,22 @@ window.verifyClaim = async () => {
       value: 0n
     });
 
-    setStatus("Step 2/3 — Waiting for validator consensus to finalise…");
+    setStatus("Step 2/3 — Retrieving evidence & waiting for consensus…");
     await client.waitForTransactionReceipt({
       hash: txHash,
       status: TransactionStatus.FINALIZED,
-      retries: 60,
+      retries: 80,
       interval: 5000
     });
 
-    // Poll get_status until is_verified flips true — avoids reading PENDING.
+    // get_status now takes the claim as an argument (per-claim storage).
     setStatus("Step 3/3 — Reading the verdict from the contract…");
     let status = null;
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 15; i++) {
       const result = await client.readContract({
         address: CONTRACT_ADDRESS,
         functionName: READ_METHOD,
-        args: []
+        args: [claim]
       });
       if (result && result.is_verified) { status = result; break; }
       await new Promise(r => setTimeout(r, 2500));
@@ -184,7 +183,7 @@ window.verifyClaim = async () => {
     if (!status) throw new Error("Verdict not ready yet — give it a few seconds and try again.");
 
     hideStatus();
-    showResult(claim, normaliseResult(status), txHash);
+    showResult(claim, status, txHash);
 
   } catch (err) {
     hideStatus();
@@ -196,28 +195,24 @@ window.verifyClaim = async () => {
   btn.textContent = "Verify this claim →";
 };
 
-function normaliseResult(result){
-  if (result && typeof result === 'object') {
-    return {
-      verdict: (result.verdict || result.status || "UNVERIFIABLE"),
-      reasoning: (result.reasoning || result.explanation || "Verified on-chain by AI consensus.")
-    };
-  }
-  const text = String(result ?? "");
-  const upper = text.toUpperCase();
-  const verdict = ["TRUE","FALSE","UNVERIFIABLE"].find(v => upper.includes(v)) || "UNVERIFIABLE";
-  return { verdict, reasoning: text || "Verdict recorded on-chain." };
-}
-
 function showResult(claim, status, txHash){
   const icons = { TRUE:"\u2705", FALSE:"\u274C", UNVERIFIABLE:"\u26A0\uFE0F" };
-  const verdict = (status.verdict || "UNVERIFIABLE").toUpperCase();
+  const verdict = String(status.verdict || "UNVERIFIABLE").toUpperCase();
   $('verdict-icon').textContent = icons[verdict] || "\u2753";
   const badge = $('verdict-badge');
   badge.textContent = verdict;
-  badge.className = "verdict-badge " + verdict;
+  badge.className = "verdict-badge " + (["TRUE","FALSE","UNVERIFIABLE"].includes(verdict) ? verdict : "UNVERIFIABLE");
   $('result-claim').textContent = claim;
   $('reasoning-box').textContent = status.reasoning || "Verified on-chain by AI consensus.";
+
+  const src = status.source_url || "";
+  const srcRow = $('source-row');
+  if (src) {
+    srcRow.innerHTML = 'Source: <a href="' + src + '" target="_blank" rel="noopener">' + src + '</a>';
+  } else {
+    srcRow.textContent = "Source: no attributable source found.";
+  }
+
   $('tx-info').textContent = "Tx: " + (txHash || "recorded");
   $('result-card').classList.add('visible');
 }
